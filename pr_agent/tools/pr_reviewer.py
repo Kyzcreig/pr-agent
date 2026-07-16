@@ -36,6 +36,10 @@ def _int_or_none(value):
         return None
 
 
+def _stripped(value):
+    return str(value or "").strip()
+
+
 def normalize_review_data(data: dict, tokens: dict | None = None) -> dict:
     """Map the model review schema to fleetreview's stable JSON contract."""
     review = data.get("review", {}) if isinstance(data, dict) else {}
@@ -49,16 +53,16 @@ def normalize_review_data(data: dict, tokens: dict | None = None) -> dict:
             continue
         line_start = _int_or_none(issue.get("start_line"))
         line_end = _int_or_none(issue.get("end_line"))
-        severity = str(issue.get("severity", "")).upper()
+        severity = _stripped(issue.get("severity")).upper()
         if severity not in {"P0", "P1", "P2", "P3"}:
             severity = "P2"
         findings.append({
-            "file": str(issue.get("relevant_file", "")),
+            "file": _stripped(issue.get("relevant_file")),
             "line_start": line_start,
             "line_end": line_end,
             "severity": severity,
-            "title": str(issue.get("issue_header", "")),
-            "body": str(issue.get("issue_content", "")),
+            "title": _stripped(issue.get("issue_header")),
+            "body": _stripped(issue.get("issue_content")),
         })
     return {"score": score, "findings": findings, "tokens": tokens or {}}
 

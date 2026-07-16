@@ -66,6 +66,31 @@ def test_normalize_review_data_rejects_invalid_confidence_and_severity():
     assert normalized["findings"][0]["line_end"] is None
 
 
+def test_normalize_review_data_strips_model_string_fields():
+    normalized = normalize_review_data({
+        "review": {
+            "confidence": "4\n",
+            "key_issues_to_review": [{
+                "relevant_file": "src/cache.py\n",
+                "start_line": "12\n",
+                "end_line": "15\n",
+                "severity": "P1\n",
+                "issue_header": "Stale write\n",
+                "issue_content": "A retry can overwrite the newer value.\n",
+            }],
+        }
+    })
+
+    assert normalized["findings"] == [{
+        "file": "src/cache.py",
+        "line_start": 12,
+        "line_end": 15,
+        "severity": "P1",
+        "title": "Stale write",
+        "body": "A retry can overwrite the newer value.",
+    }]
+
+
 def test_should_publish_review_no_suggestions_respects_config():
     reviewer = _make_reviewer()
     settings = get_settings()
