@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import json
 import os
+from typing import Any, cast
 
 import litellm
 import openai
@@ -47,6 +48,7 @@ class LiteLLMAIHandler(BaseAiHandler):
         self._aws_imds_fell_back = False
         self._aws_boto3_creds = None  # original boto3 credentials object for IMDS refresh
         self._aws_bedrock_lock = asyncio.Lock()
+        self.last_usage = {}
 
         if get_settings().get("LITELLM.DISABLE_AIOHTTP", False):
             litellm.disable_aiohttp_transport = True
@@ -606,6 +608,8 @@ class LiteLLMAIHandler(BaseAiHandler):
 
                 # Get completion with automatic streaming detection
                 resp, finish_reason, response_obj = await self._get_completion(**kwargs)
+                usage = cast(dict[str, Any], response_obj.dict().get("usage", {}))
+                self.last_usage = dict(usage or {})
 
             except openai.RateLimitError as e:
                 get_logger().error(f"Rate limit error during LLM inference: {e}")
