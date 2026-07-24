@@ -359,6 +359,53 @@ class LiteLLMAIHandler(BaseAiHandler):
 
         return kwargs
 
+    @staticmethod
+    def _is_claude_adaptive_thinking_model(model: str) -> bool:
+        """Detect adaptive-only Claude models (Opus 4.7/4.8, Sonnet 5).
+
+        These models reject thinking={"type": "enabled", "budget_tokens": ...} with an
+        HTTP 400 and only accept thinking={"type": "adaptive"} (verified live against the
+        Anthropic Messages API). Match on the model basename so provider prefixes
+        (anthropic/, bedrock/...) and separator variants (4-7 / 4.7 / 4_7) all hit.
+        """
+        model_lower = model.lower()
+        return any(
+            fragment in model_lower
+            for fragment in (
+                "opus-4-7", "opus_4_7", "opus-4.7", "opus_4.7",
+                "opus-4-8", "opus_4_8", "opus-4.8", "opus_4.8",
+                "sonnet-5", "sonnet_5", "sonnet-5.0", "sonnet_5.0",
+            )
+        )
+
+    def _configure_claude_adaptive_thinking(self, model: str, kwargs: dict) -> dict:
+        """
+        Configure adaptive thinking for adaptive-only Claude models.
+
+        Sends thinking={"type": "adaptive"} plus output_config={"effort": <level>} derived
+        from config.reasoning_effort (both accepted with HTTP 200 by the Anthropic wire;
+        thinking.effort inline is rejected with HTTP 400 "Extra inputs are not permitted").
+        Temperature is forced to 1: the API rejects any other value in adaptive mode.
+        """
+        kwargs["thinking"] = {"type": "adaptive"}
+        config_effort = get_settings().config.reasoning_effort
+        try:
+            ReasoningEffort(config_effort)
+            effort = config_effort
+        except (ValueError, TypeError):
+            effort = None
+        # The output_config.effort field accepts low/medium/high/xhigh/max; skip the
+        # OpenAI-only values ("none", "minimal") and let the API pick its default.
+        if effort in ("low", "medium", "high", "xhigh"):
+            kwargs["output_config"] = {"effort": effort}
+        get_logger().info(
+            f"Using adaptive thinking for model {model}"
+            + (f" with output_config effort '{effort}'" if effort in ("low", "medium", "high", "xhigh") else "")
+        )
+        # temperature may only be set to 1 when thinking/adaptive mode is enabled
+        kwargs["temperature"] = 1
+        return kwargs
+
     def add_litellm_callbacks(self, kwargs) -> dict:
         captured_extra = []
 
@@ -507,6 +554,29 @@ class LiteLLMAIHandler(BaseAiHandler):
                     else:
                         provider_prefix = 'openai/'
                     model = provider_prefix + model_base.replace('_thinking', '')  # remove _thinking suffix
+                elif model_base.startswith('grok') and get_settings().config.get(
+                        "enable_grok_reasoning_effort", False):
+                    # Grok-family models accept the OpenAI reasoning_effort parameter; send the exact
+                    # same payload shape as the GPT-5 branch (reasoning_effort + allowed_openai_params).
+                    # Gated behind enable_grok_reasoning_effort (default false) so existing grok
+                    # deployments keep a byte-identical wire request unless explicitly enabled.
+                    config_effort = get_settings().config.reasoning_effort
+                    try:
+                        ReasoningEffort(config_effort)
+                        effort = config_effort
+                    except (ValueError, TypeError):
+                        effort = ReasoningEffort.MEDIUM.value
+                        if config_effort is not None:
+                            get_logger().warning(
+                                f"Invalid reasoning_effort '{config_effort}' in config. "
+                                f"Using default '{effort}'. Valid values: {[e.value for e in ReasoningEffort]}"
+                            )
+
+                    thinking_kwargs_gpt5 = {
+                        "reasoning_effort": effort,
+                        "allowed_openai_params": ["reasoning_effort"],
+                    }
+                    get_logger().info(f"Using reasoning_effort='{effort}' for Grok model")
 
 
                 # Currently, some models do not support a separate system and user prompts
@@ -556,8 +626,15 @@ class LiteLLMAIHandler(BaseAiHandler):
                     get_logger().info(f"Adding reasoning_effort with value {reasoning_effort} to model {model}.")
                     kwargs["reasoning_effort"] = reasoning_effort
 
+                # Adaptive-only Claude models (Opus 4.7/4.8, Sonnet 5) reject budget_tokens with
+                # HTTP 400 and instead take thinking={"type": "adaptive"} plus an optional
+                # output_config={"effort": ...} (verified live against the Anthropic wire).
+                # Gated behind enable_claude_adaptive_thinking (default false).
+                if self._is_claude_adaptive_thinking_model(model) and get_settings().config.get(
+                        "enable_claude_adaptive_thinking", False):
+                    kwargs = self._configure_claude_adaptive_thinking(model, kwargs)
                 # https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking
-                if (model in self.claude_extended_thinking_models) and get_settings().config.get("enable_claude_extended_thinking", False):
+                elif (model in self.claude_extended_thinking_models) and get_settings().config.get("enable_claude_extended_thinking", False):
                     kwargs = self._configure_claude_extended_thinking(model, kwargs)
 
                 if get_settings().litellm.get("enable_callbacks", False):

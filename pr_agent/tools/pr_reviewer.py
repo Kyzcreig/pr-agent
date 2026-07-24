@@ -40,6 +40,10 @@ def _stripped(value):
     return str(value or "").strip()
 
 
+def _finding_action(value):
+    return value if isinstance(value, str) and value in {"auto-fix", "ask-user", "no-op"} else "ask-user"
+
+
 def normalize_review_data(data: dict, tokens: dict | None = None) -> dict:
     """Map the model review schema to fleetreview's stable JSON contract."""
     review = data.get("review", {}) if isinstance(data, dict) else {}
@@ -63,6 +67,7 @@ def normalize_review_data(data: dict, tokens: dict | None = None) -> dict:
             "severity": severity,
             "title": _stripped(issue.get("issue_header")),
             "body": _stripped(issue.get("issue_content")),
+            "action": _finding_action(issue.get("action")),
         })
     return {"score": score, "findings": findings, "tokens": tokens or {}}
 
