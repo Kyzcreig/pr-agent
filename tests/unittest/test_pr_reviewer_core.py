@@ -23,6 +23,7 @@ def test_normalize_review_data_emits_confidence_findings_and_tokens():
                 "severity": "P1",
                 "issue_header": "Stale write",
                 "issue_content": "A retry can overwrite the newer value.",
+                "action": "auto-fix",
             }],
         }
     }
@@ -38,6 +39,7 @@ def test_normalize_review_data_emits_confidence_findings_and_tokens():
             "severity": "P1",
             "title": "Stale write",
             "body": "A retry can overwrite the newer value.",
+            "action": "auto-fix",
         }],
         "tokens": {"prompt_tokens": 100, "completion_tokens": 20},
     }
@@ -54,6 +56,7 @@ def test_normalize_review_data_rejects_invalid_confidence_and_severity():
                 "severity": "critical",
                 "issue_header": "Bad output",
                 "issue_content": "Malformed model fields must not become trusted values.",
+                "action": "fix-it",
             }],
         }
     }
@@ -64,6 +67,7 @@ def test_normalize_review_data_rejects_invalid_confidence_and_severity():
     assert normalized["findings"][0]["severity"] == "P2"
     assert normalized["findings"][0]["line_start"] is None
     assert normalized["findings"][0]["line_end"] is None
+    assert normalized["findings"][0]["action"] == "ask-user"
 
 
 def test_normalize_review_data_strips_model_string_fields():
@@ -77,6 +81,7 @@ def test_normalize_review_data_strips_model_string_fields():
                 "severity": "P1\n",
                 "issue_header": "Stale write\n",
                 "issue_content": "A retry can overwrite the newer value.\n",
+                "action": "no-op\n",
             }],
         }
     })
@@ -88,7 +93,26 @@ def test_normalize_review_data_strips_model_string_fields():
         "severity": "P1",
         "title": "Stale write",
         "body": "A retry can overwrite the newer value.",
+        "action": "ask-user",
     }]
+
+
+def test_normalize_review_data_defaults_missing_action_fail_closed():
+    normalized = normalize_review_data({
+        "review": {
+            "confidence": 3,
+            "key_issues_to_review": [{
+                "relevant_file": "src/design.py",
+                "start_line": 8,
+                "end_line": 8,
+                "severity": "P1",
+                "issue_header": "Intent question",
+                "issue_content": "This challenges a product choice.",
+            }],
+        }
+    })
+
+    assert normalized["findings"][0]["action"] == "ask-user"
 
 
 def test_should_publish_review_no_suggestions_respects_config():

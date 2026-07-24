@@ -99,6 +99,7 @@ class SubPR(BaseModel):
 class KeyIssuesComponentLink(BaseModel):
     relevant_file: str = Field(description="The full file path of the relevant file")
     severity: str = Field(description="Exactly one of P0, P1, P2, or P3. P0 is catastrophic, P1 is blocking, P2 is important non-blocking, and P3 is minor.")
+    action: str = Field(description="Exactly one of auto-fix, ask-user, or no-op. Use auto-fix only for an objective defect with a mechanically safe remedy; use ask-user for intent or design questions and insufficient evidence; use no-op for informational findings.")
     issue_header: str = Field(description="One or two word title for the issue. For example: 'Possible Bug', etc.")
     issue_content: str = Field(description="A short and concise description of the issue, why it matters, and the specific scenario or input that triggers it. Do not mention line numbers in this field.")
     start_line: int = Field(description="The start line that corresponds to this issue in the relevant file")
@@ -195,6 +196,7 @@ review:
     - relevant_file: |
         directory/xxx.py
       severity: P1
+      action: auto-fix
       issue_header: |
         Possible Bug
       issue_content: |
@@ -335,6 +337,7 @@ review:
     - relevant_file: |
         ...
       severity: P1
+      action: auto-fix
       issue_header: |
         ...
       issue_content: |
