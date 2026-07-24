@@ -98,6 +98,7 @@ class SubPR(BaseModel):
 
 class KeyIssuesComponentLink(BaseModel):
     relevant_file: str = Field(description="The full file path of the relevant file")
+    severity: str = Field(description="Exactly one of P0, P1, P2, or P3. P0 is catastrophic, P1 is blocking, P2 is important non-blocking, and P3 is minor.")
     issue_header: str = Field(description="One or two word title for the issue. For example: 'Possible Bug', etc.")
     issue_content: str = Field(description="A short and concise description of the issue, why it matters, and the specific scenario or input that triggers it. Do not mention line numbers in this field.")
     start_line: int = Field(description="The start line that corresponds to this issue in the relevant file")
@@ -129,6 +130,7 @@ class ContributionTimeCostEstimate(BaseModel):
 {%- endif %}
 
 class Review(BaseModel):
+    confidence: int = Field(description="Merge-confidence score from 1 through 5. 1 means unsafe to merge and 5 means ready to merge. Any unresolved P0 or P1 finding limits this score to 3 or below.")
 {%- if related_tickets %}
     ticket_compliance_check: List[TicketCompliance] = Field(description="A list of compliance checks for the related tickets")
 {%- endif %}
@@ -166,6 +168,7 @@ class PRReview(BaseModel):
 Example output:
 ```yaml
 review:
+  confidence: 4
 {%- if related_tickets %}
   ticket_compliance_check:
     - ticket_url: |
@@ -191,6 +194,7 @@ review:
   key_issues_to_review:
     - relevant_file: |
         directory/xxx.py
+      severity: P1
       issue_header: |
         Possible Bug
       issue_content: |
@@ -304,6 +308,7 @@ The PR code diff:
 Example output:
 ```yaml
 review:
+  confidence: 4
 {%- if related_tickets %}
   ticket_compliance_check:
     - ticket_url: |
@@ -329,6 +334,7 @@ review:
   key_issues_to_review:
     - relevant_file: |
         ...
+      severity: P1
       issue_header: |
         ...
       issue_content: |

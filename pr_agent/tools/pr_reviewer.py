@@ -29,6 +29,44 @@ from pr_agent.tools.ticket_pr_compliance_check import (
     extract_and_cache_pr_tickets, extract_tickets)
 
 
+def _int_or_none(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _stripped(value):
+    return str(value or "").strip()
+
+
+def normalize_review_data(data: dict, tokens: dict | None = None) -> dict:
+    """Map the model review schema to fleetreview's stable JSON contract."""
+    review = data.get("review", {}) if isinstance(data, dict) else {}
+    score = _int_or_none(review.get("confidence"))
+    if score not in range(1, 6):
+        score = None
+
+    findings = []
+    for issue in review.get("key_issues_to_review", []) or []:
+        if not isinstance(issue, dict):
+            continue
+        line_start = _int_or_none(issue.get("start_line"))
+        line_end = _int_or_none(issue.get("end_line"))
+        severity = _stripped(issue.get("severity")).upper()
+        if severity not in {"P0", "P1", "P2", "P3"}:
+            severity = "P2"
+        findings.append({
+            "file": _stripped(issue.get("relevant_file")),
+            "line_start": line_start,
+            "line_end": line_end,
+            "severity": severity,
+            "title": _stripped(issue.get("issue_header")),
+            "body": _stripped(issue.get("issue_content")),
+        })
+    return {"score": score, "findings": findings, "tokens": tokens or {}}
+
+
 class PRReviewer:
     """
     The PRReviewer class is responsible for reviewing a pull request and generating feedback using an AI model.
@@ -249,6 +287,11 @@ class PRReviewer:
                                         "relevant_file:", "relevant_line:", "suggestion:"],
                          first_key=first_key, last_key=last_key)
         github_action_output(data, 'review')
+
+        structured_publisher = getattr(self.git_provider, "publish_structured_review", None)
+        if structured_publisher:
+            usage = getattr(self.ai_handler, "last_usage", {})
+            structured_publisher(normalize_review_data(data, usage))
 
         if 'review' not in data:
             get_logger().exception("Failed to parse review data", artifact={"data": data})

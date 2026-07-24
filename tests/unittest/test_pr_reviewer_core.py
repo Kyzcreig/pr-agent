@@ -2,7 +2,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from pr_agent.config_loader import get_settings
-from pr_agent.tools.pr_reviewer import PRReviewer
+from pr_agent.tools.pr_reviewer import PRReviewer, normalize_review_data
 
 
 def _make_reviewer(git_provider=None):
@@ -10,6 +10,85 @@ def _make_reviewer(git_provider=None):
     reviewer.git_provider = git_provider or MagicMock()
     reviewer.pr_url = "https://example/pr/1"
     return reviewer
+
+
+def test_normalize_review_data_emits_confidence_findings_and_tokens():
+    data = {
+        "review": {
+            "confidence": "4",
+            "key_issues_to_review": [{
+                "relevant_file": "src/cache.py",
+                "start_line": 12,
+                "end_line": 15,
+                "severity": "P1",
+                "issue_header": "Stale write",
+                "issue_content": "A retry can overwrite the newer value.",
+            }],
+        }
+    }
+
+    normalized = normalize_review_data(data, {"prompt_tokens": 100, "completion_tokens": 20})
+
+    assert normalized == {
+        "score": 4,
+        "findings": [{
+            "file": "src/cache.py",
+            "line_start": 12,
+            "line_end": 15,
+            "severity": "P1",
+            "title": "Stale write",
+            "body": "A retry can overwrite the newer value.",
+        }],
+        "tokens": {"prompt_tokens": 100, "completion_tokens": 20},
+    }
+
+
+def test_normalize_review_data_rejects_invalid_confidence_and_severity():
+    data = {
+        "review": {
+            "confidence": 7,
+            "key_issues_to_review": [{
+                "relevant_file": "x.py",
+                "start_line": "bad",
+                "end_line": None,
+                "severity": "critical",
+                "issue_header": "Bad output",
+                "issue_content": "Malformed model fields must not become trusted values.",
+            }],
+        }
+    }
+
+    normalized = normalize_review_data(data, {})
+
+    assert normalized["score"] is None
+    assert normalized["findings"][0]["severity"] == "P2"
+    assert normalized["findings"][0]["line_start"] is None
+    assert normalized["findings"][0]["line_end"] is None
+
+
+def test_normalize_review_data_strips_model_string_fields():
+    normalized = normalize_review_data({
+        "review": {
+            "confidence": "4\n",
+            "key_issues_to_review": [{
+                "relevant_file": "src/cache.py\n",
+                "start_line": "12\n",
+                "end_line": "15\n",
+                "severity": "P1\n",
+                "issue_header": "Stale write\n",
+                "issue_content": "A retry can overwrite the newer value.\n",
+            }],
+        }
+    })
+
+    assert normalized["findings"] == [{
+        "file": "src/cache.py",
+        "line_start": 12,
+        "line_end": 15,
+        "severity": "P1",
+        "title": "Stale write",
+        "body": "A retry can overwrite the newer value.",
+    }]
 
 
 def test_should_publish_review_no_suggestions_respects_config():
