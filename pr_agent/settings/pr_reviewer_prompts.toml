@@ -69,7 +69,7 @@ Organizational standards and review skills (apply the ones relevant to this PR):
 ======
 {%- endif %}
 
-{%- if extra_instructions %}
+{%- if extra_instructions and not (extra_instructions_after_diff is defined and extra_instructions_after_diff) %}
 
 
 Extra instructions from the user:
@@ -302,6 +302,14 @@ The PR code diff:
 ======
 {{ diff|trim }}
 ======
+{%- if extra_instructions and extra_instructions_after_diff is defined and extra_instructions_after_diff %}
+
+
+Extra instructions from the user:
+======
+{{ extra_instructions }}
+======
+{%- endif %}
 
 
 {%- if duplicate_prompt_examples %}
