@@ -25,6 +25,9 @@ use_global_settings_file=true
 extra_config_url="" # optional URL or path to an additional .pr_agent.toml merged before the repo-local config; also settable via --extra_config_url or PR_AGENT_EXTRA_CONFIG_URL. See docs/docs/usage-guide/configuration_options.md#external-configuration-url.
 disable_auto_feedback = false
 ai_timeout=120 # 2 minutes
+retry_same_model_on_timeout = true # when false, a timed-out call is not retried on the same model and moves on to fallback_models
+# num_retries = 0 # per-call retries inside the completion client itself; unset keeps the client's default. These multiply the handler's own retry attempts
+# same_model_attempts = 2 # (fork) total same-model attempts by the handler's own retry layer; 1 = no handler retry. Unset keeps MODEL_RETRIES
 skip_keys = []
 custom_reasoning_model = false # when true, disables system messages and temperature controls for models that don't support chat-style inputs
 response_language="en-US" # Language locales code for PR responses in ISO 3166 and ISO 639 format (e.g., "en-US", "it-IT", "zh-CN", ...)
