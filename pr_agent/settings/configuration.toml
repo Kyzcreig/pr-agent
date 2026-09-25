@@ -104,6 +104,9 @@ require_ticket_analysis_review=true
 publish_output_no_suggestions=true # Set to "false" if you only need the reviewer's remarks (not labels, not "security audit", etc.) and want to avoid noisy "No major issues detected" comments.
 persistent_comment=true
 extra_instructions = ""
+# true: render extra_instructions in the user turn AFTER the diff instead of in the system prompt, so
+# reviewers that differ only in extra_instructions share a byte-identical prompt-cache prefix.
+extra_instructions_after_diff = false
 num_max_findings = 3
 final_update_message = true
 # review labels

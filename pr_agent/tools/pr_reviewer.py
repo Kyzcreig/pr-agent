@@ -137,6 +137,7 @@ class PRReviewer:
             'question_str': question_str,
             'answer_str': answer_str,
             "extra_instructions": get_settings().pr_reviewer.extra_instructions,
+            "extra_instructions_after_diff": get_settings().pr_reviewer.get("extra_instructions_after_diff", False),
             "skills_context": get_skills_context(),
             "repo_context": build_repo_context(self.git_provider),
             "commit_messages_str": self.git_provider.get_commit_messages(),
