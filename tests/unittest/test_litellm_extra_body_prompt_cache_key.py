@@ -21,7 +21,20 @@ def extra_body():
 def test_prompt_cache_key_is_forwarded(extra_body):
     extra_body(json.dumps({"prompt_cache_key": "fr-abc123"}))
     kwargs = _process_litellm_extra_body({"model": "gpt-6-sol"})
-    assert kwargs == {"model": "gpt-6-sol", "prompt_cache_key": "fr-abc123"}
+    # Routed through extra_body: litellm drops a top-level prompt_cache_key before the wire.
+    assert kwargs == {"model": "gpt-6-sol", "extra_body": {"prompt_cache_key": "fr-abc123"}}
+
+
+def test_prompt_cache_key_merges_into_existing_extra_body(extra_body):
+    extra_body(json.dumps({"prompt_cache_key": "k", "service_tier": "flex"}))
+    kwargs = _process_litellm_extra_body({"model": "m", "extra_body": {"other": 1}})
+    assert kwargs == {"model": "m", "service_tier": "flex", "extra_body": {"other": 1, "prompt_cache_key": "k"}}
+
+
+def test_prompt_cache_key_cannot_override_existing_extra_body_key(extra_body):
+    extra_body(json.dumps({"prompt_cache_key": "k"}))
+    with pytest.raises(ValueError, match="cannot override"):
+        _process_litellm_extra_body({"model": "m", "extra_body": {"prompt_cache_key": "other"}})
 
 
 def test_unknown_key_is_still_refused(extra_body):
