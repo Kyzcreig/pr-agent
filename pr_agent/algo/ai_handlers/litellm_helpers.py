@@ -106,6 +106,14 @@ def _process_litellm_extra_body(kwargs: dict) -> dict:
             colliding_keys = kwargs.keys() & litellm_extra_body.keys()
             if colliding_keys:
                 raise ValueError(f"LITELLM.EXTRA_BODY cannot override existing parameters: {', '.join(colliding_keys)}")
+            # litellm drops a top-level prompt_cache_key for openai/<custom> models (drop_params
+            # True or False); only extra_body puts it in the request body.
+            if "prompt_cache_key" in litellm_extra_body:
+                body = dict(kwargs.get("extra_body") or {})
+                if "prompt_cache_key" in body:
+                    raise ValueError("LITELLM.EXTRA_BODY cannot override existing parameters: prompt_cache_key")
+                body["prompt_cache_key"] = litellm_extra_body.pop("prompt_cache_key")
+                kwargs["extra_body"] = body
             kwargs.update(litellm_extra_body)
         except json.JSONDecodeError as e:
             raise ValueError(f"LITELLM.EXTRA_BODY contains invalid JSON: {str(e)}")
