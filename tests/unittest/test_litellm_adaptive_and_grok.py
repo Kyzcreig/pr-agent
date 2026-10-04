@@ -85,7 +85,6 @@ async def test_gpt5_path_unchanged_by_grok_flag(monkeypatch):
     assert kwargs["model"] == "openai/gpt-5-2025-08-07"
 
 
-
 # ---------- GPT-6 reasoning-effort gating (t_5ca34c8b) ----------
 # gpt-6.x missed the gpt-5 prefix check, so CONFIG__REASONING_EFFORT never reached the wire for
 # it. The path is gated (default false) because callers already set reasoning_effort=high for
