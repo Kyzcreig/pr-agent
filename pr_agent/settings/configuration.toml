@@ -74,6 +74,9 @@ enable_grok_reasoning_effort = false
 # Send reasoning_effort (from config.reasoning_effort) for GPT-6 family models, same payload as GPT-5.
 # Default false keeps gpt-6 requests byte-identical to before.
 enable_gpt6_reasoning_effort = false
+# Send reasoning_effort (from config.reasoning_effort) for Moonshot kimi-* models. kimi accepts low/high/max
+# (absent = max); other values are not sent. Temperature is left as configured. Default false = byte-identical.
+enable_kimi_reasoning_effort = false
 # extended thinking for Claude reasoning models
 enable_claude_extended_thinking = false # Set to true to enable extended thinking feature
 extended_thinking_budget_tokens = 2048

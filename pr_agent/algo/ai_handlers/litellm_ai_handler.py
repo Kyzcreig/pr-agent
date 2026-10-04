@@ -25,6 +25,8 @@ from pr_agent.log import get_logger
 
 MODEL_RETRIES = 2
 DUMMY_LITELLM_API_KEY = "dummy_key"  # placeholder set when no OpenAI key is configured
+# Moonshot kimi-k3 reasoning_effort values (no "medium"); an absent field means max.
+KIMI_REASONING_EFFORTS = frozenset({"low", "high", "max"})
 
 
 def _as_bool(value, default: bool) -> bool:
@@ -588,6 +590,7 @@ class LiteLLMAIHandler(BaseAiHandler):
                                               {"type": "image_url", "image_url": {"url": img_path}}]
 
                 thinking_kwargs_gpt5 = None
+                thinking_kwargs_kimi = None
                 # Detect GPT-5 family regardless of provider prefix(es) on the model name.
                 # Users sometimes put a provider prefix in config (e.g. "openai/gpt-5.1-codex-max"),
                 # and Azure mode auto-prepends "azure/", which together can produce stacked prefixes
@@ -677,6 +680,26 @@ class LiteLLMAIHandler(BaseAiHandler):
                         "allowed_openai_params": ["reasoning_effort"],
                     }
                     get_logger().info(f"Using reasoning_effort='{effort}' for Grok model")
+                elif model_base.rsplit('/', 1)[-1].startswith('kimi') and get_settings().config.get(
+                        "enable_kimi_reasoning_effort", False):
+                    # Moonshot kimi-k3 always reasons; reasoning_effort accepts low/high/max and an absent
+                    # field means max. Gated behind enable_kimi_reasoning_effort (default false) so existing
+                    # kimi requests stay byte-identical. Temperature is kept: Moonshot pins it (callers send
+                    # temperature=1) and rejects any other value, so this branch does not reuse the
+                    # temperature-dropping GPT-5 kwargs. A value kimi does not accept is not sent (a 400
+                    # would fail the review), leaving the vendor default.
+                    config_effort = get_settings().config.reasoning_effort
+                    if config_effort in KIMI_REASONING_EFFORTS:
+                        thinking_kwargs_kimi = {
+                            "reasoning_effort": config_effort,
+                            "allowed_openai_params": ["reasoning_effort"],
+                        }
+                        get_logger().info(f"Using reasoning_effort='{config_effort}' for Kimi model")
+                    else:
+                        get_logger().warning(
+                            f"reasoning_effort '{config_effort}' is not accepted by kimi models "
+                            f"(valid: {sorted(KIMI_REASONING_EFFORTS)}); sending none (vendor default)"
+                        )
 
 
                 # Currently, some models do not support a separate system and user prompts
@@ -714,6 +737,8 @@ class LiteLLMAIHandler(BaseAiHandler):
                     kwargs.update(thinking_kwargs_gpt5)
                     if 'temperature' in kwargs:
                         del kwargs['temperature']
+                if thinking_kwargs_kimi:
+                    kwargs.update(thinking_kwargs_kimi)
 
                 # Add reasoning_effort if model supports it
                 if model in self.support_reasoning_models:

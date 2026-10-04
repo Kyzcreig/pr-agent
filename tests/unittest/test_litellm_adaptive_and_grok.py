@@ -118,6 +118,46 @@ async def test_gpt5_path_unchanged_by_gpt6_flag(monkeypatch):
         assert kwargs["model"] == "openai/gpt-5.2"
 
 
+# ---------- Kimi reasoning-effort gating (t_95bd8a28) ----------
+# Moonshot kimi-k3 always reasons; an absent reasoning_effort means max. Ace 2026-10-04 12:27: kimi at high.
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", ["openai/kimi-k3", "openai/moonshotai/kimi-k3"])
+async def test_kimi_without_flag_sends_no_reasoning_effort(monkeypatch, model):
+    kwargs = await run_completion(monkeypatch, model, make_settings("high"))
+    assert "reasoning_effort" not in kwargs
+    assert "allowed_openai_params" not in kwargs
+    assert kwargs["model"] == model
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", ["openai/kimi-k3", "kimi-k3", "openai/moonshotai/kimi-k3"])
+@pytest.mark.parametrize("effort", ["low", "high", "max"])
+async def test_kimi_with_flag_sends_reasoning_effort_and_keeps_temperature(monkeypatch, model, effort):
+    settings = make_settings(effort, {"enable_kimi_reasoning_effort": True})
+    kwargs = await run_completion(monkeypatch, model, settings)
+    assert kwargs["reasoning_effort"] == effort
+    assert kwargs["allowed_openai_params"] == ["reasoning_effort"]
+    assert "temperature" in kwargs  # Moonshot pins temperature; the caller's value must reach the wire
+    assert kwargs["model"] == model  # no provider-prefix rewrite
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("effort", ["medium", "xhigh", "bogus", None])
+async def test_kimi_with_flag_drops_values_kimi_rejects(monkeypatch, effort):
+    settings = make_settings(effort, {"enable_kimi_reasoning_effort": True})
+    kwargs = await run_completion(monkeypatch, "openai/kimi-k3", settings)
+    assert "reasoning_effort" not in kwargs
+    assert "allowed_openai_params" not in kwargs
+
+
+@pytest.mark.asyncio
+async def test_kimi_flag_does_not_touch_other_families(monkeypatch):
+    settings = make_settings("high", {"enable_kimi_reasoning_effort": True})
+    assert "reasoning_effort" not in await run_completion(monkeypatch, "grok-4.7", settings)
+    assert "reasoning_effort" not in await run_completion(monkeypatch, "gpt-6.1-sol", settings)
+
+
 # ---------- Claude adaptive thinking gating ----------
 
 @pytest.mark.parametrize(
@@ -204,3 +244,4 @@ def test_config_reasoning_effort_env_override_reaches_settings(monkeypatch):
     assert clean.config.get("enable_claude_adaptive_thinking") is False
     assert clean.config.get("enable_grok_reasoning_effort") is False
     assert clean.config.get("enable_gpt6_reasoning_effort") is False
+    assert clean.config.get("enable_kimi_reasoning_effort") is False
