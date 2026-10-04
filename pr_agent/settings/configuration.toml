@@ -71,6 +71,9 @@ reasoning_effort = "medium" # "none", "minimal", "low", "medium", "high", "xhigh
 # {reasoning_effort, allowed_openai_params} payload as the GPT-5 family, sourced from
 # config.reasoning_effort above. Default false keeps grok requests byte-identical to before.
 enable_grok_reasoning_effort = false
+# Send reasoning_effort (from config.reasoning_effort) for GPT-6 family models, same payload as GPT-5.
+# Default false keeps gpt-6 requests byte-identical to before.
+enable_gpt6_reasoning_effort = false
 # extended thinking for Claude reasoning models
 enable_claude_extended_thinking = false # Set to true to enable extended thinking feature
 extended_thinking_budget_tokens = 2048
