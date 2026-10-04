@@ -85,6 +85,40 @@ async def test_gpt5_path_unchanged_by_grok_flag(monkeypatch):
     assert kwargs["model"] == "openai/gpt-5-2025-08-07"
 
 
+
+# ---------- GPT-6 reasoning-effort gating (t_5ca34c8b) ----------
+# gpt-6.x missed the gpt-5 prefix check, so CONFIG__REASONING_EFFORT never reached the wire for
+# it. The path is gated (default false) because callers already set reasoning_effort=high for
+# every model; an ungated widen would change existing gpt-6 requests on deploy.
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", ["gpt-6.1-sol", "openai/gpt-6.1-sol"])
+async def test_gpt6_without_flag_sends_no_reasoning_effort(monkeypatch, model):
+    kwargs = await run_completion(monkeypatch, model, make_settings("high"))
+    assert "reasoning_effort" not in kwargs
+    assert "allowed_openai_params" not in kwargs
+    assert kwargs["model"] == model  # no provider-prefix rewrite either
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", ["gpt-6.1-sol", "openai/gpt-6.1-sol", "gpt-6"])
+async def test_gpt6_with_flag_sends_reasoning_effort_like_gpt5(monkeypatch, model):
+    settings = make_settings("high", {"enable_gpt6_reasoning_effort": True})
+    kwargs = await run_completion(monkeypatch, model, settings)
+    assert kwargs["reasoning_effort"] == "high"
+    assert kwargs["allowed_openai_params"] == ["reasoning_effort"]
+    assert "temperature" not in kwargs
+    assert kwargs["model"] == "openai/" + model.removeprefix("openai/")
+
+
+@pytest.mark.asyncio
+async def test_gpt5_path_unchanged_by_gpt6_flag(monkeypatch):
+    for flags in ({}, {"enable_gpt6_reasoning_effort": True}):
+        kwargs = await run_completion(monkeypatch, "gpt-5.2", make_settings("low", flags))
+        assert kwargs["reasoning_effort"] == "low"
+        assert kwargs["model"] == "openai/gpt-5.2"
+
+
 # ---------- Claude adaptive thinking gating ----------
 
 @pytest.mark.parametrize(
@@ -170,3 +204,4 @@ def test_config_reasoning_effort_env_override_reaches_settings(monkeypatch):
     assert clean.config.reasoning_effort == "medium"
     assert clean.config.get("enable_claude_adaptive_thinking") is False
     assert clean.config.get("enable_grok_reasoning_effort") is False
+    assert clean.config.get("enable_gpt6_reasoning_effort") is False

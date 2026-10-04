@@ -627,6 +627,33 @@ class LiteLLMAIHandler(BaseAiHandler):
                     else:
                         provider_prefix = 'openai/'
                     model = provider_prefix + model_base.replace('_thinking', '')  # remove _thinking suffix
+                elif model_base.startswith('gpt-6') and get_settings().config.get(
+                        "enable_gpt6_reasoning_effort", False):
+                    # GPT-6 family takes the same payload as GPT-5. Gated behind
+                    # enable_gpt6_reasoning_effort (default false): callers that already set
+                    # reasoning_effort for every model keep a byte-identical gpt-6 request
+                    # (no reasoning_effort, no provider-prefix rewrite) unless explicitly enabled.
+                    config_effort = get_settings().config.reasoning_effort
+                    try:
+                        ReasoningEffort(config_effort)
+                        effort = config_effort
+                    except (ValueError, TypeError):
+                        effort = ReasoningEffort.MEDIUM.value
+                        if config_effort is not None:
+                            get_logger().warning(
+                                f"Invalid reasoning_effort '{config_effort}' in config. "
+                                f"Using default '{effort}'. Valid values: {[e.value for e in ReasoningEffort]}"
+                            )
+                    thinking_kwargs_gpt5 = {
+                        "reasoning_effort": effort,
+                        "allowed_openai_params": ["reasoning_effort"],
+                    }
+                    get_logger().info(f"Using reasoning_effort='{effort}' for GPT-6 model")
+                    if self.azure or user_model.startswith('azure/'):
+                        provider_prefix = 'azure/'
+                    else:
+                        provider_prefix = 'openai/'
+                    model = provider_prefix + model_base
                 elif model_base.startswith('grok') and get_settings().config.get(
                         "enable_grok_reasoning_effort", False):
                     # Grok-family models accept the OpenAI reasoning_effort parameter; send the exact
