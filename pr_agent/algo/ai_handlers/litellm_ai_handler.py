@@ -451,6 +451,26 @@ class LiteLLMAIHandler(BaseAiHandler):
             )
         )
 
+    @staticmethod
+    def _ensure_litellm_reasoning_support(model: str) -> None:
+        """
+        Register supports_reasoning for an adaptive Claude model litellm's cost map does not know.
+
+        litellm only accepts the thinking kwarg for Anthropic when its model-cost map marks the
+        model supports_reasoning. That map is fetched from GitHub at import; when the fetch fails
+        litellm falls back to the map bundled with the wheel, which can predate the model and then
+        rejects thinking with UnsupportedParamsError. Known models are left untouched.
+        """
+        try:
+            provider = litellm.get_llm_provider(model)[1]
+            if provider != "anthropic" or litellm.supports_reasoning(model=model):
+                return
+        except Exception as e:
+            get_logger().warning(f"Could not check litellm reasoning support for {model}: {e}")
+            return
+        litellm.register_model({model: {"litellm_provider": provider, "mode": "chat", "supports_reasoning": True}})
+        get_logger().info(f"Registered supports_reasoning for {model}: absent from litellm's model cost map")
+
     def _configure_claude_adaptive_thinking(self, model: str, kwargs: dict) -> dict:
         """
         Configure adaptive thinking for adaptive-only Claude models.
@@ -460,6 +480,7 @@ class LiteLLMAIHandler(BaseAiHandler):
         thinking.effort inline is rejected with HTTP 400 "Extra inputs are not permitted").
         Temperature is forced to 1: the API rejects any other value in adaptive mode.
         """
+        self._ensure_litellm_reasoning_support(model)
         kwargs["thinking"] = {"type": "adaptive"}
         config_effort = get_settings().config.reasoning_effort
         try:
