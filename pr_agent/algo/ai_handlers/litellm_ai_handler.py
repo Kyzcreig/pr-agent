@@ -27,6 +27,8 @@ MODEL_RETRIES = 2
 DUMMY_LITELLM_API_KEY = "dummy_key"  # placeholder set when no OpenAI key is configured
 # Moonshot kimi-k3 reasoning_effort values (no "medium"); an absent field means max.
 KIMI_REASONING_EFFORTS = frozenset({"low", "high", "max"})
+# litellm providers whose request body is OpenAI chat-completions (no Anthropic-only fields).
+_CHAT_WIRE_PROVIDERS = frozenset({"openai", "custom_openai"})
 
 
 def _as_bool(value, default: bool) -> bool:
@@ -471,6 +473,14 @@ class LiteLLMAIHandler(BaseAiHandler):
         litellm.register_model({model: {"litellm_provider": provider, "mode": "chat", "supports_reasoning": True}})
         get_logger().info(f"Registered supports_reasoning for {model}: absent from litellm's model cost map")
 
+    @staticmethod
+    def _routes_chat_wire(model: str) -> bool:
+        """True when litellm sends ``model`` over the OpenAI chat-completions wire."""
+        try:
+            return litellm.get_llm_provider(model)[1] in _CHAT_WIRE_PROVIDERS
+        except Exception:
+            return False
+
     def _configure_claude_adaptive_thinking(self, model: str, kwargs: dict) -> dict:
         """
         Configure adaptive thinking for adaptive-only Claude models.
@@ -479,15 +489,32 @@ class LiteLLMAIHandler(BaseAiHandler):
         from config.reasoning_effort (both accepted with HTTP 200 by the Anthropic wire;
         thinking.effort inline is rejected with HTTP 400 "Extra inputs are not permitted").
         Temperature is forced to 1: the API rejects any other value in adaptive mode.
+
+        On an OpenAI chat-completions route (``openai/<claude>`` through a chat bridge)
+        the Anthropic-only ``thinking``/``output_config`` fields are not chat wire: litellm
+        drops ``thinking`` under drop_params but forwards ``output_config``, and a strict
+        chat relay rejects the mixed body. There the effort travels as the chat field
+        ``reasoning_effort`` (passed through like the GPT-5 branch) and no Anthropic field
+        is sent.
         """
-        self._ensure_litellm_reasoning_support(model)
-        kwargs["thinking"] = {"type": "adaptive"}
         config_effort = get_settings().config.reasoning_effort
         try:
             ReasoningEffort(config_effort)
             effort = config_effort
         except (ValueError, TypeError):
             effort = None
+        if self._routes_chat_wire(model):
+            if effort in ("low", "medium", "high", "xhigh"):
+                kwargs["reasoning_effort"] = effort
+                kwargs["allowed_openai_params"] = ["reasoning_effort"]
+            get_logger().info(
+                f"Using chat-wire effort for adaptive model {model}"
+                + (f" with reasoning_effort '{effort}'" if effort in ("low", "medium", "high", "xhigh") else "")
+            )
+            kwargs["temperature"] = 1
+            return kwargs
+        self._ensure_litellm_reasoning_support(model)
+        kwargs["thinking"] = {"type": "adaptive"}
         # The output_config.effort field accepts low/medium/high/xhigh/max; skip the
         # OpenAI-only values ("none", "minimal") and let the API pick its default.
         if effort in ("low", "medium", "high", "xhigh"):
