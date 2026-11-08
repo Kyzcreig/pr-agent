@@ -167,6 +167,9 @@ async def test_kimi_flag_does_not_touch_other_families(monkeypatch):
         ("anthropic/claude-opus-4-8", True),
         ("claude-opus-4-7", True),
         ("claude-sonnet-5", True),
+        ("claude-opus-5-5", True),
+        ("anthropic/claude-opus-5-5", True),
+        ("claude-opus-5", True),
         ("bedrock/us.anthropic.claude-opus-4-7-v1:0", True),
         ("claude-opus-4-5-20251101", False),
         ("claude-sonnet-4-6", False),
@@ -189,6 +192,16 @@ async def test_adaptive_claude_without_flag_sends_no_thinking(monkeypatch):
 async def test_adaptive_claude_with_flag_sends_adaptive_thinking(monkeypatch):
     settings = make_settings("high", {"enable_claude_adaptive_thinking": True})
     kwargs = await run_completion(monkeypatch, "anthropic/claude-opus-4-8", settings)
+    assert kwargs["thinking"] == {"type": "adaptive"}
+    assert kwargs["output_config"] == {"effort": "high"}
+    assert kwargs["temperature"] == 1
+
+
+@pytest.mark.asyncio
+async def test_opus_5_5_with_flag_sends_adaptive_thinking(monkeypatch):
+    """t_37e14181: opus-5-5 400s on temperature 0.2; the adaptive path sends effort + temperature 1."""
+    settings = make_settings("high", {"enable_claude_adaptive_thinking": True})
+    kwargs = await run_completion(monkeypatch, "anthropic/claude-opus-5-5", settings)
     assert kwargs["thinking"] == {"type": "adaptive"}
     assert kwargs["output_config"] == {"effort": "high"}
     assert kwargs["temperature"] == 1
