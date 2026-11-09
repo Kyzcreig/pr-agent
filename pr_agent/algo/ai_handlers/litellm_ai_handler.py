@@ -449,6 +449,9 @@ class LiteLLMAIHandler(BaseAiHandler):
             for fragment in (
                 "opus-4-7", "opus_4_7", "opus-4.7", "opus_4.7",
                 "opus-4-8", "opus_4_8", "opus-4.8", "opus_4.8",
+                # Opus 5.x: a non-adaptive request carries temperature, which opus-5-5 rejects
+                # with HTTP 400 "`temperature` is deprecated for this model" (t_37e14181).
+                "opus-5", "opus_5",
                 "sonnet-5", "sonnet_5", "sonnet-5.0", "sonnet_5.0",
             )
         )
